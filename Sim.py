@@ -75,15 +75,42 @@ viewingWindow_obs = (horizSize_obs, verticSize_obs)
 filler = zeros(viewingWindow_obs, dtype=complex128)
 
 def getTime():
+    """Prints elapsed time since global `startTime` in seconds.
+    
+    Formats output to 2 decimal places.
+    """
+
     print('Time [s]: ' + '{0:.2f}'.format(time.time() - startTime))
 
 def D(X,Y, x,y,z):
-    #Euclidian Distance
+    """Calculates 3D Euclidean distance between two points.
+    
+    Args:
+        X (float): Source point x-coordinate
+        Y (float): Source point y-coordinate
+        x (float): Target point x-coordinate
+        y (float): Target point y-coordinate
+        z (float): Z-axis separation between points
+        
+    Returns:
+        float: Distance between (X,Y,0) and (x,y,z)
+    """
     
     return sqrt((x-X)**2 + (y-Y)**2 + z**2)
 
 def A(X,Y, w0):
-    #Input Amplitude Distribution
+    """Input amplitude distribution for beam source.
+    
+    Supports 'gaussian' beam profile (configured via global `beamShape`).
+    
+    Args:
+        X (float): X-coordinate in source plane
+        Y (float): Y-coordinate in source plane
+        w0 (float): Beam waist radius (for Gaussian beam)
+        
+    Returns:
+        float: Amplitude value at (X, Y)
+    """
 
     if beamShape == 'gaussian':
         numerator = -1 * (X**2 + Y**2)
@@ -91,23 +118,54 @@ def A(X,Y, w0):
         return exp(numerator / denominator)
 
 def pointEE(X,Y, obsX,obsY):
-    #Naive Huygens' Principle
+    """Calculates single-point electric field contribution using Huygens' principle.
+    
+    Combines amplitude distribution and spherical wave propagation.
+    
+    Args:
+        X (float): Source point x-coordinate
+        Y (float): Source point y-coordinate
+        obsX (float): Observer point x-coordinate
+        obsY (float): Observer point y-coordinate
+        
+    Returns:
+        complex: Complex electric field contribution at (obsX, obsY)
+    """
 
     numerator = exp(1j * k0 * D(X,Y, obsX,obsY,dd))
     denominator = D(X,Y, obsX,obsY,dd)
     return A(X,Y, W0) * numerator / denominator
 
 def assignEE(tup):
-    #Paralell Function
+    """Computes E-field contributions for a source point.
+    
+    Maps source coordinates to observer grid. Designed for multiprocessing.
+    
+    Args:
+        tup (tuple): (m, n) indices for source grid coordinates
+    
+    Returns:
+        tuple: 
+            - EfromXY (ndarray): Complex E-field matrix from source (X[m], Y[n])
+            - tup (tuple): Input indices (for result tracking)
+    """
 
-    temp = zeros(viewingWindow, dtype=complex128)
+    EfromXY = zeros(viewingWindow, dtype=complex128)
     for m1 in range(horizSize_obs):
         for n1 in range(verticSize_obs):
-            temp[m1][n1] = pointEE(X[tup[0]],Y[tup[1]], X_obs[m1],Y_obs[n1])
+            EfromXY[m1][n1] = pointEE(X[tup[0]],Y[tup[1]], X_obs[m1],Y_obs[n1])
 
-    return temp, tup
+    return EfromXY, tup
 
 def computeEfield():
+    """Computes total electric field using parallelized Huygens' principle.
+    
+    Distributes source point calculations across multiprocessing pool.
+    Populates a 4D object array of complex field matrices.
+    
+    Returns:
+        ndarray: 4D array of complex E-field matrices from all sources
+    """
     Efield = ndarray(viewingWindow, object) #Electric Field
     for m in range(horizSize):
         for n in range(verticSize):
@@ -124,12 +182,27 @@ def computeEfield():
     return Efield
 
 def computeAmplitude():
+    """Calculates source amplitude distribution over the beam grid.
+    
+    Returns:
+        ndarray: 2D amplitude matrix over (horizSize, verticSize) grid
+    """
     AA = zeros(viewingWindow) #Amplitude Distribution
     for m in range(horizSize):
         for n in range(verticSize):
             AA[m][n] = A(X[m], Y[n], W0)
 
 def sumEField(Efield):
+    """Synthesizes total E-field by summing contributions with phase shifts.
+    
+    Includes z-dependent phase term (global `ZZ` matrix) in summation.
+    
+    Args:
+        Efield (ndarray): 2D array of complex E-field matrices
+        
+    Returns:
+        ndarray: Complex total E-field matrix over observation grid
+    """
     ETOT = zeros(viewingWindow, dtype=complex128) #TOTAL Electric Field
     for m in range(horizSize):
         print('Creating ETOT:',m)
