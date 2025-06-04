@@ -42,8 +42,6 @@ hmax = 5 * lam
 #   gaussian
 beamShape = 'gaussian'
 
-#LOGGING ENABLED?
-loggingEnabled = True
 
 ##END OF PARAMETERS##
 #*************************
@@ -221,11 +219,12 @@ def logData():
             logsDirExists = True
             break
     if logsDirExists == False:
-        os.mkdir('./logs')
+        os.mkdir(logFile)
 
     newestLog = 1
     for file in os.scandir(logFile):
-        newestLog += 1
+        if file.name == 'run_' + str(newestLog) + '.log':
+            newestLog += 1
 
     logging.basicConfig(filename='./logs/run_' + str(newestLog) + '.log', level=logging.INFO)
     logger.info('Started')
@@ -238,11 +237,25 @@ def logData():
     logger.info("NMAX: " + str(NMAX))
     logger.info('--End User Parameters--')
 
+def saveData(listofData):
+    dataDirExists = False
+    dataFolder = './logs'
+
+    newestData = 1
+    for file in os.scandir(dataFolder):
+        if file.name == str(newestData):
+            newestData += 1
+    os.mkdir(dataFolder + '/' + str(newestData))
+
+    for toSave in listofData:
+        save(dataFolder + '/' + str(newestData) + '/' + namestr(toSave, globals())[0], toSave)
+
+def namestr(obj, namespace):
+    return [name for name in namespace if namespace[name] is obj]
 
 if __name__ == "__main__":
 
-    if loggingEnabled == True:
-        logData()
+    logData()
 
     AA = computeAmplitude()
 
@@ -253,6 +266,8 @@ if __name__ == "__main__":
     ETOT = sumEField(Efield)
 
     getTime()
+
+    saveData([Efield, ETOT])
 
     plt.imshow(abs(ETOT))
     plt.show()
