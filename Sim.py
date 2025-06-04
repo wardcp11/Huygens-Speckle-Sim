@@ -4,10 +4,11 @@ import multiprocessing as mp
 from multiprocessing import shared_memory
 import time
 import logging
+import os
 
 pool_size = mp.cpu_count()
-
 startTime = time.time()
+logger = logging.getLogger(__name__)
 
 #*************************
 ##PARAMETERS##
@@ -41,6 +42,8 @@ hmax = 5 * lam
 #   gaussian
 beamShape = 'gaussian'
 
+#LOGGING ENABLED?
+loggingEnabled = True
 
 ##END OF PARAMETERS##
 #*************************
@@ -210,7 +213,36 @@ def sumEField(Efield):
             ETOT += Efield[m][n] * exp(1j * 2 * k0 * ZZ[m][n])
     return ETOT
 
+def logData():
+    logsDirExists = False
+    logFile = './logs'
+    for file in os.scandir('./'):
+        if file.name == 'logs':
+            logsDirExists = True
+            break
+    if logsDirExists == False:
+        os.mkdir('./logs')
+
+    newestLog = 1
+    for file in os.scandir(logFile):
+        newestLog += 1
+
+    logging.basicConfig(filename='./logs/run_' + str(newestLog) + '.log', level=logging.INFO)
+    logger.info('Started')
+    logger.info('--User Parameters--')
+    logger.info('Distance: ' + str(dd))
+    logger.info('Beam Waist: ' + str(W0))
+    logger.info('Roughness: ' + str(hmax))
+    logger.info('Surface Sample Size: ' + str(dx))
+    logger.info('Observation Sample Size: ' + str(dx_obs))
+    logger.info("NMAX: " + str(NMAX))
+    logger.info('--End User Parameters--')
+
+
 if __name__ == "__main__":
+
+    if loggingEnabled == True:
+        logData()
 
     AA = computeAmplitude()
 
