@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 lam = 1
 
 #Sampling Points: 2 * NMAX + 1
-NMAX = 20
+NMAX = 100
 
 #Surface Sampling
 dx = lam / 5
@@ -118,61 +118,35 @@ def A(X,Y, w0):
         denominator = 2 * w0**2
         return exp(numerator / denominator)
 
-def pointEE(X,Y, obsX,obsY):
-    """Calculates single-point electric field contribution using Huygens' principle.
+def pointEE(X,Y, obsX,obsY, tup):
     
-    Combines amplitude distribution and spherical wave propagation.
-    
-    Args:
-        X (float): Source point x-coordinate
-        Y (float): Source point y-coordinate
-        obsX (float): Observer point x-coordinate
-        obsY (float): Observer point y-coordinate
-        
-    Returns:
-        complex: Complex electric field contribution at (obsX, obsY)
-    """
+    xIndex = tup[0]
+    yIndex = tup[1]
+    AmplitudeArray = tup[2]
+    xPoint = X[xIndex]
+    yPoint = Y[yIndex]
 
-    numerator = exp(1j * k0 * D(X,Y, obsX,obsY,dd))
-    denominator = D(X,Y, obsX,obsY,dd)
-    return A(X,Y, W0) * numerator / denominator
+    numerator = exp(1j * k0 * D(xPoint,yPoint, obsX,obsY,dd))
+    denominator = D(xPoint,yPoint, obsX,obsY,dd)
+    return AmplitudeArray[xIndex][yIndex] * numerator / denominator
 
 def assignEE(tup):
-    """Computes E-field contributions for a source point.
-    
-    Maps source coordinates to observer grid. Designed for multiprocessing.
-    
-    Args:
-        tup (tuple): (m, n) indices for source grid coordinates
-    
-    Returns:
-        tuple: 
-            - EfromXY (ndarray): Complex E-field matrix from source (X[m], Y[n])
-            - tup (tuple): Input indices (for result tracking)
-    """
 
     EfromXY = zeros(viewingWindow, dtype=complex128)
     for m1 in range(horizSize_obs):
         for n1 in range(verticSize_obs):
-            EfromXY[m1][n1] = pointEE(X[tup[0]],Y[tup[1]], X_obs[m1],Y_obs[n1])
+            EfromXY[m1][n1] = pointEE(X,Y, X_obs[m1],Y_obs[n1], tup)
 
-    return EfromXY, tup
+    return EfromXY, (tup[0],tup[1])
 
-def computeEfield():
-    """Computes total electric field using parallelized Huygens' principle.
-    
-    Distributes source point calculations across multiprocessing pool.
-    Populates a 4D object array of complex field matrices.
-    
-    Returns:
-        ndarray: 4D array of complex E-field matrices from all sources
-    """
+def computeEfield(AmplitudeArray):
+
     Efield = ndarray(viewingWindow, object) #Electric Field
     for m in range(horizSize):
         for n in range(verticSize):
             Efield[m][n] = filler
 
-    combinations = [(m, n) for m in range(horizSize) for n in range(verticSize)]
+    combinations = [(m, n, AmplitudeArray) for m in range(horizSize) for n in range(verticSize)]
 
     with mp.Pool(processes=pool_size) as p:
         it = p.imap(assignEE, combinations)
@@ -183,27 +157,15 @@ def computeEfield():
     return Efield
 
 def computeAmplitude():
-    """Calculates source amplitude distribution over the beam grid.
-    
-    Returns:
-        ndarray: 2D amplitude matrix over (horizSize, verticSize) grid
-    """
+
     AA = zeros(viewingWindow) #Amplitude Distribution
     for m in range(horizSize):
         for n in range(verticSize):
             AA[m][n] = A(X[m], Y[n], W0)
+    return AA
 
 def sumEField(Efield):
-    """Synthesizes total E-field by summing contributions with phase shifts.
-    
-    Includes z-dependent phase term (global `ZZ` matrix) in summation.
-    
-    Args:
-        Efield (ndarray): 2D array of complex E-field matrices
-        
-    Returns:
-        ndarray: Complex total E-field matrix over observation grid
-    """
+
     ETOT = zeros(viewingWindow, dtype=complex128) #TOTAL Electric Field
     for m in range(horizSize):
         print('Creating ETOT:',m)
@@ -212,6 +174,7 @@ def sumEField(Efield):
     return ETOT
 
 def logData():
+
     logsDirExists = False
     logFile = './logs'
     for file in os.scandir('./'):
@@ -236,8 +199,10 @@ def logData():
     logger.info('Observation Sample Size: ' + str(dx_obs))
     logger.info("NMAX: " + str(NMAX))
     logger.info('--End User Parameters--')
+    logger.info("Runtime: " + str(getTime()))
 
 def saveData(listofData):
+
     dataDirExists = False
     dataFolder = './logs'
 
@@ -248,26 +213,30 @@ def saveData(listofData):
     os.mkdir(dataFolder + '/' + str(newestData))
 
     for toSave in listofData:
-        save(dataFolder + '/' + str(newestData) + '/' + namestr(toSave, globals())[0], toSave)
+        save(dataFolder + '/' + str(newestData) + '/' + namestr(toSave, globals())[-1], toSave)
 
 def namestr(obj, namespace):
+
     return [name for name in namespace if namespace[name] is obj]
 
 if __name__ == "__main__":
 
-    logData()
+    AA = computeAmplitude()
+
+
 
     AA = computeAmplitude()
 
     ZZ = random.rand(horizSize,verticSize) * hmax #RANDOM SURFACE
-
-    Efield = computeEfield()
-
+    Efield = computeEfield(AA)
     ETOT = sumEField(Efield)
 
-    getTime()
-
-    saveData([Efield, ETOT])
-
-    plt.imshow(abs(ETOT))
-    plt.show()
+    if False: #Multibounce
+        for bounces in range(0):
+            ZZ = random.rand(horizSize,verticSize) * hmax #RANDOM SURFACE
+            Efield = computeEfield(abs(ETOT))
+            ETOT = sumEField(Efield)
+    
+    if True: #DATA LOGGING
+        logData()
+        saveData([Efield, ETOT, AA, ZZ])
