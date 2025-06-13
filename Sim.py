@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 lam = 1
 
 #Sampling Points: 2 * NMAX + 1
-NMAX = 100
+NMAX = 20
 
 #Surface Sampling
 dx = lam / 5
@@ -32,10 +32,10 @@ dx_obs = lam / 5
 dy_obs = dx_obs
 
 #Observation Distance
-dd = 50 * lam
+dd = 100 * lam
 
 #Surface Roughness
-hmax = 5 * lam
+hmax = .2 * lam
 
 ##INPUT BEAM SHAPE
 #Possible Shapes:
@@ -49,6 +49,7 @@ beamShape = 'gaussian'
 
 k0 = 2 * pi / lam
 
+dataDictionary = {}
 
 #Surface Sampling Points
 X = linspace(-NMAX * dx, NMAX * dx, 2*NMAX + 1)
@@ -201,9 +202,9 @@ def logData():
     logger.info('--End User Parameters--')
     logger.info("Runtime: " + str(getTime()))
 
-def saveData(listofData):
+def saveData(dataDict):
 
-    dataDirExists = False
+    logData()
     dataFolder = './logs'
 
     newestData = 1
@@ -212,18 +213,12 @@ def saveData(listofData):
             newestData += 1
     os.mkdir(dataFolder + '/' + str(newestData))
 
-    for toSave in listofData:
-        save(dataFolder + '/' + str(newestData) + '/' + namestr(toSave, globals())[-1], toSave)
+    for key in dataDict:
+        for toSave in dataDict[key]:
+            save(dataFolder + '/' + str(newestData) + '/' + str(key), toSave)
 
-def namestr(obj, namespace):
-
-    return [name for name in namespace if namespace[name] is obj]
 
 if __name__ == "__main__":
-
-    AA = computeAmplitude()
-
-
 
     AA = computeAmplitude()
 
@@ -231,12 +226,21 @@ if __name__ == "__main__":
     Efield = computeEfield(AA)
     ETOT = sumEField(Efield)
 
+    dataDictionary["Initial ETOT"] = [ETOT]
+    dataDictionary["Initial AA"] = [AA]
+    dataDictionary["Initial ZZ"] = [ZZ]
+
     if False: #Multibounce
-        for bounces in range(0):
+        for bounces in range(1,1):
+            AA = abs(ETOT)
             ZZ = random.rand(horizSize,verticSize) * hmax #RANDOM SURFACE
             Efield = computeEfield(abs(ETOT))
             ETOT = sumEField(Efield)
+
+            dataDictionary["bounceETOT{0}".format(bounces)] = [ETOT]
+            dataDictionary["bounceAA{0}".format(bounces)] = [AA]
+            dataDictionary["bounceZZ{0}".format(bounces)] = [ZZ]
     
+
     if True: #DATA LOGGING
-        logData()
-        saveData([Efield, ETOT, AA, ZZ])
+        saveData(dataDictionary)
